@@ -1,4 +1,5 @@
 import gitlab
+import httpx
 import logging
 from app.config import settings
 
@@ -22,6 +23,53 @@ def get_project():
         raise ValueError("GITLAB_PROJECT_ID is not configured in the .env file!")
     return client.projects.get(settings.GITLAB_PROJECT_ID)
 
+
+# ==========================================
+# MODEL CONTEXT PROTOCOL (MCP) CLIENT ADAPTER
+# ==========================================
+
+def call_gitlab_mcp_tool(tool_name: str, arguments: dict) -> str:
+    """
+    MCP Client interface to invoke tools exposed by the GitLab MCP Server.
+    Uses standard JSON-RPC format over HTTP/SSE.
+    Returns None if MCP server is not enabled, allowing local fallback.
+    """
+    if not settings.USE_MCP_SERVER:
+        return None
+
+    url = f"{settings.MCP_SERVER_URL}/v1/tools/call"
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments
+        },
+        "id": 1
+    }
+    
+    logger.info(f"Routing tool '{tool_name}' through GitLab MCP Server. URL: {url}")
+    try:
+        response = httpx.post(url, json=payload, timeout=20.0)
+        if response.status_code == 200:
+            data = response.json()
+            if "error" in data:
+                err_msg = data["error"].get("message", "Unknown JSON-RPC error")
+                return f"GitLab MCP Server Error: {err_msg}"
+                
+            result = data.get("result", {})
+            content = result.get("content", [])
+            if content and isinstance(content, list):
+                text_parts = [c.get("text", "") for c in content if c.get("type") == "text"]
+                return "\n".join(text_parts)
+            return f"GitLab MCP Server returned response but no text content: {data}"
+        else:
+            return f"Error: GitLab MCP Server returned status {response.status_code}: {response.text}"
+    except Exception as e:
+        logger.error(f"Error calling GitLab MCP Server: {e}")
+        return f"Error calling GitLab MCP Server: {str(e)}"
+
+
 # ==========================================
 # 1. ISSUE MANAGEMENT GROUP
 # ==========================================
@@ -39,6 +87,18 @@ def create_gitlab_issue(title: str, description: str = "", assignee_username: st
     Returns:
         A string message containing the creation status, Issue ID, and URL link.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("create_issue", {
+            "title": title,
+            "description": description,
+            "assignee_username": assignee_username,
+            "labels": labels
+        })
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         issue_data = {
@@ -76,6 +136,16 @@ def list_gitlab_issues(state: str = "opened", labels: str = "") -> str:
     Returns:
         A formatted list of Issues.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("list_issues", {
+            "state": state,
+            "labels": labels
+        })
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         params = {'state': state}
@@ -107,6 +177,16 @@ def comment_on_issue(issue_iid: int, body: str) -> str:
     Returns:
         Status message of the operation.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("comment_on_issue", {
+            "issue_iid": issue_iid,
+            "body": body
+        })
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         issue = project.issues.get(issue_iid)
@@ -127,6 +207,13 @@ def list_gitlab_branches() -> str:
     Returns:
         A list of branches along with their latest commit information.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("list_branches", {})
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         branches = project.branches.list(get_all=False, page=1, per_page=20)
@@ -153,11 +240,20 @@ def get_file_content(file_path: str, ref: str = "main") -> str:
     Returns:
         The content of the file or an error message.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("get_file_content", {
+            "file_path": file_path,
+            "ref": ref
+        })
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         f = project.files.get(file_path=file_path, ref=ref)
         content = f.decode().decode('utf-8')
-        # Limit response characters to avoid exceeding Telegram size limits (approx 3500 chars)
         if len(content) > 3000:
             content = content[:3000] + "\n\n... [File content too long, truncated] ..."
         return f"Source file '{file_path}' (ref '{ref}'):\n```\n{content}\n```"
@@ -178,6 +274,18 @@ def create_merge_request(source_branch: str, target_branch: str, title: str, des
     Returns:
         Operation status and the Merge Request URL.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("create_merge_request", {
+            "source_branch": source_branch,
+            "target_branch": target_branch,
+            "title": title,
+            "description": description
+        })
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         mr_data = {
@@ -202,6 +310,15 @@ def accept_merge_request(mr_iid: int) -> str:
     Returns:
         Status message of the merge action.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("accept_merge_request", {
+            "mr_iid": mr_iid
+        })
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         mr = project.mergerequests.get(mr_iid)
@@ -226,6 +343,16 @@ def list_pipeline_statuses(ref: str = "", limit: int = 5) -> str:
     Returns:
         A list of pipelines with status and URL.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("list_pipeline_statuses", {
+            "ref": ref,
+            "limit": limit
+        })
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         params = {}
@@ -254,6 +381,15 @@ def trigger_pipeline_retry(pipeline_id: int) -> str:
     Returns:
         Operation status of the retry trigger.
     """
+    # 1. Route via MCP Server if enabled
+    if settings.USE_MCP_SERVER:
+        mcp_res = call_gitlab_mcp_tool("trigger_pipeline_retry", {
+            "pipeline_id": pipeline_id
+        })
+        if mcp_res is not None:
+            return mcp_res
+
+    # 2. Fallback to direct GitLab SDK execution
     try:
         project = get_project()
         pipeline = project.pipelines.get(pipeline_id)

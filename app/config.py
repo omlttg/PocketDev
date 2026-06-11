@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     GITLAB_PERSONAL_ACCESS_TOKEN: str = ""
     GITLAB_PROJECT_ID: str = ""  # Numeric ID or path-with-namespace string
     
+    # --- Model Context Protocol (MCP) Config ---
+    USE_MCP_SERVER: bool = False
+    MCP_SERVER_URL: str = "http://localhost:8001"
+    
     PORT: int = 8000
     HOST: str = "0.0.0.0"
     WEBHOOK_SECRET_TOKEN: str = "default_secret_token"

@@ -1,3 +1,5 @@
+import os
+import json
 import httpx
 import logging
 from app.config import settings
@@ -5,19 +7,32 @@ from app.tools.gitlab_tools import create_gitlab_issue, accept_merge_request
 
 logger = logging.getLogger(__name__)
 
-# Mock database for Cloud IDE Agent proposals
-# In a real MVP, this would query a Cloud DB or the Antigravity Agent API
-MOCK_IDE_PROPOSALS = {
-    "P-01": {
-        "id": "P-01",
-        "task": "Implement OAuth2 Google Login",
-        "branch": "feature/google-oauth",
-        "merge_request_iid": 1,  # Maps to a real or mock Merge Request ID on GitLab
-        "changed_files": ["app/routes/auth.py", "app/models/user.py"],
-        "status": "PENDING_REVIEW",
-        "description": "Added Google login endpoints, user validation schema, and unit tests."
-    }
-}
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROPOSALS_FILE = os.path.join(PROJECT_ROOT, "data", "proposals.json")
+
+def load_proposals() -> dict:
+    os.makedirs(os.path.dirname(PROPOSALS_FILE), exist_ok=True)
+    if not os.path.exists(PROPOSALS_FILE):
+        try:
+            with open(PROPOSALS_FILE, "w", encoding="utf-8") as f:
+                json.dump({}, f)
+        except Exception as err:
+            logger.error(f"Error creating proposals file: {err}")
+        return {}
+    try:
+        with open(PROPOSALS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading proposals: {e}")
+        return {}
+
+def save_proposals(proposals: dict):
+    os.makedirs(os.path.dirname(PROPOSALS_FILE), exist_ok=True)
+    try:
+        with open(PROPOSALS_FILE, "w", encoding="utf-8") as f:
+            json.dump(proposals, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Error saving proposals: {e}")
 
 # ==========================================
 # 1. TEAM COORDINATION TOOLS
@@ -97,27 +112,37 @@ def get_ide_agent_status() -> str:
     Returns:
         A formatted status log showing the IDE Agent activity and code proposals.
     """
-    # Simulate fetching status from the cloud agent
-    status_report = (
+    proposals = load_proposals()
+    pending = [p for p in proposals.values() if p.get("status") in ["PENDING_REVIEW", "PENDING"]]
+    
+    if not pending:
+        return (
+            "🤖 <b>Cloud IDE Agent Status:</b> <code>IDLE / WAITING</code>\n"
+            "💻 No active branch code proposals are currently pending review."
+        )
+        
+    status_report = [
         "🤖 <b>Cloud IDE Agent Status:</b> <code>WAITING_FOR_REVIEW</code>\n"
-        "💻 <b>Active Branch:</b> <code>feature/google-oauth</code>\n"
-        "📈 <b>Last Activity Logs:</b>\n"
-        " ├─ [14:15:22] Pulled latest changes from main branch\n"
-        " ├─ [14:16:05] Created Google OAuth routes in <code>app/routes/auth.py</code>\n"
-        " ├─ [14:16:48] Configured validation schemas in <code>app/models/user.py</code>\n"
-        " └─ [14:17:12] Ran pytest suite: 12 tests passed, 0 failed.\n\n"
-        "📥 <b>Pending Proposal:</b>\n"
-        " ├─ <b>ID:</b> <code>P-01</code>\n"
-        " ├─ <b>Title:</b> Implement OAuth2 Google Login\n"
-        " ├─ <b>Files:</b> <code>app/routes/auth.py</code>, <code>app/models/user.py</code>\n"
-        " └─ <b>Action required:</b> Reply with 'Approve P-01' or 'Reject P-01 [reason]'."
-    )
-    return status_report
+        "📈 <b>Pending Proposals:</b>"
+    ]
+    for p in pending:
+        changed = ", ".join(p.get("changed_files", [])) if p.get("changed_files") else "None"
+        cmd = p.get("command", "")
+        cmd_str = f"\n ├─ <b>Command:</b> <code>{cmd}</code>" if cmd else ""
+        status_report.append(
+            f" ├─ <b>ID:</b> <code>{p['id']}</code>\n"
+            f" ├─ <b>Task:</b> {p['task']}\n"
+            f" ├─ <b>Description:</b> {p.get('description', '')}"
+            f"{cmd_str}\n"
+            f" ├─ <b>Files:</b> <code>{changed}</code>\n"
+            f" └─ <b>Action required:</b> Reply with 'Approve {p['id']}' or 'Reject {p['id']} [reason]'."
+        )
+    return "\n\n".join(status_report)
 
 def review_ide_agent_proposal(proposal_id: str, action: str, feedback: str = "") -> str:
     """
     Approve or Reject code changes proposed by the Cloud IDE Agent. 
-    Approving will automatically merge the code and run CI/CD pipelines.
+    Approving will automatically merge the code (if merge_request_iid is present) and run CI/CD pipelines.
 
     Args:
         proposal_id: The ID of the proposal to review (e.g. 'P-01').
@@ -127,7 +152,8 @@ def review_ide_agent_proposal(proposal_id: str, action: str, feedback: str = "")
     Returns:
         The action execution status.
     """
-    proposal = MOCK_IDE_PROPOSALS.get(proposal_id)
+    proposals = load_proposals()
+    proposal = proposals.get(proposal_id)
     if not proposal:
         return f"Error: Proposal ID '{proposal_id}' was not found."
         
@@ -140,27 +166,34 @@ def review_ide_agent_proposal(proposal_id: str, action: str, feedback: str = "")
         
     try:
         if action_lower == "approve":
-            # 1. Update mock status
             proposal["status"] = "APPROVED"
-            mr_iid = proposal["merge_request_iid"]
+            mr_iid = proposal.get("merge_request_iid")
             
-            # 2. Attempt to accept the Merge Request on GitLab (if MR exists)
-            gitlab_merge_msg = accept_merge_request(mr_iid)
+            gitlab_merge_msg = ""
+            if mr_iid:
+                try:
+                    gitlab_merge_msg = f"\n🦊 <b>GitLab Action:</b> {accept_merge_request(int(mr_iid))}"
+                except Exception as mr_err:
+                    gitlab_merge_msg = f"\n⚠️ <i>Failed to merge MR: {mr_err}</i>"
+            
+            save_proposals(proposals)
             
             result = (
                 f"✅ <b>Proposal {proposal_id} APPROVED</b>\n\n"
-                f"🚀 <b>Action Taken:</b> Merging branch <code>{proposal['branch']}</code> into main.\n"
-                f"🦊 <b>GitLab Action:</b> {gitlab_merge_msg}\n\n"
-                f"🎉 The Cloud IDE Agent has been notified. Code integrated, CI/CD pipeline triggered."
+                f"🚀 <b>Action Taken:</b> Proposal marked as approved.{gitlab_merge_msg}\n\n"
+                f"🎉 The Cloud IDE Agent has been notified."
             )
             return result
         else:
             # Action: Reject
             proposal["status"] = "REJECTED"
+            proposal["feedback"] = feedback
+            save_proposals(proposals)
+            
             result = (
                 f"❌ <b>Proposal {proposal_id} REJECTED</b>\n\n"
                 f"📝 <b>Feedback sent to Cloud IDE Agent:</b> \"{feedback}\"\n\n"
-                f"🔄 The Cloud IDE Agent is now rewriting the code on branch <code>{proposal['branch']}</code> based on your feedback."
+                f"🔄 The Cloud IDE Agent is now notified to rewrite or refactor based on your feedback."
             )
             return result
             

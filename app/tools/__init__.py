@@ -14,6 +14,8 @@ from .team_tools import (
     get_ide_agent_status,
     review_ide_agent_proposal
 )
+from .architecture_tools import analyze_codebase_architecture
+from .decomposition_tools import decompose_task_into_subissues
 
 # Export all tools for the Gemini Agent
 GITLAB_TOOLS = [
@@ -28,5 +30,7 @@ GITLAB_TOOLS = [
     trigger_pipeline_retry,
     assign_task_to_developer,
     get_ide_agent_status,
-    review_ide_agent_proposal
+    review_ide_agent_proposal,
+    analyze_codebase_architecture,
+    decompose_task_into_subissues
 ]

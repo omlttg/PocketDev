@@ -6,6 +6,26 @@ This project is built for the **"Building Agents for Real-World Challenges" Hack
 
 ---
 
+## 🏆 Hackathon Context & Core Criteria
+
+PocketDev is designed and built to fully meet the most rigorous evaluation criteria of the competition:
+
+### 1. Move Beyond Chat
+*   PocketDev does not merely answer user questions. It is equipped with a robust suite of **Tools** to actively interact with the external environment.
+*   The assistant can manage source code repositories, query IDE Agent status, review code proposals, create issues, write comments, and control GitLab CI/CD pipelines directly via Telegram.
+
+### 2. The Multi-Step Mission (Handling Complex Goals & Planning)
+*   The system is capable of receiving complex software development requests from the CTO (e.g., *"Build an e-wallet payment system and integrate security"*).
+*   Using Gemini AI as the planning brain, PocketDev automatically decomposes large requests into 2-4 specific, independent technical sub-issues and automatically creates and links them on GitLab for the CTO to track.
+
+### 3. Partner Power (Deep Integration with GitLab MCP Server)
+*   Tightly integrated with the GitLab API to read source files, manage branches, create Merge Requests, approve Code Proposals (automatically merging into the main branch), and trigger/retry CI/CD Pipelines.
+
+### 4. Google Cloud Agent Builder (Vertex AI Agent Builder)
+*   Utilizes Vertex AI Agent Builder as the main conversation orchestration layer. When running in `USE_AGENT_BUILDER=True` mode, the system routes messages through GCP Agent Builder and calls the FastAPI backend via Fulfillment Webhooks (`/webhook/tools`) to execute the corresponding Python tools.
+
+---
+
 ## 1. System Requirements & Installation
 
 ### Step 1: Clone the project and initialize a Python Virtual Environment
@@ -110,20 +130,100 @@ gcloud auth application-default login
 
 ## 4. Suggested 3-Minute Demo Video Script (Mobile CTO Workspace)
 
-Here is a walkthrough script demonstrating the core Agent-IDE coordination and team delegation capabilities:
+Here is a walkthrough script demonstrating the real-time Agent-IDE coordination and team delegation capabilities:
 
-1. **Introduction (CTO Mobile Portal):**
-   * Send message: *"Hello PocketDev"*
-   * The Agent responds as your Pocket CTO Agent, ready to coordinate team tasks and Cloud IDE Agents.
-2. **IDE Agent Supervision (Cloud-based Antigravity IDE):**
-   * Send message: *"Check Cloud IDE Agent status"*
-   * The Agent calls `get_ide_agent_status` and displays the Cloud Agent logs, current active branch, and a pending code proposal `P-01` (Implement OAuth2 Google Login).
-3. **Approve Code Proposal (Triggering CI/CD):**
-   * Send message: *"Approve code proposal P-01"*
-   * PocketDev calls `review_ide_agent_proposal(proposal_id="P-01", action="approve")`.
-   * It logs the approval, calls GitLab API to accept the Merge Request, merges the code, and triggers the Pipeline run.
-4. **Team Task Delegation (Group Chat Alerts):**
-   * Send message: *"Assign task to dev_alex to implement Google OAuth frontend buttons"* (replace `dev_alex` with your team member's username).
-   * PocketDev calls `assign_task_to_developer` which:
-     * Creates a GitLab Issue assigned to `dev_alex`.
-     * Automatically posts a notification in the **Team Telegram Group Chat**, tagging `@dev_alex` with the task description and GitLab Issue link.
+1. **Introduction & Project Setup:**
+   * Run the local FastAPI backend server.
+   * Send message to the bot on Telegram: *"Hello PocketDev"*.
+   * The Agent responds as your Pocket CTO Assistant, ready to coordinate your team and watch over active IDE Agents.
+2. **Simulate IDE Agent Proposal:**
+   * From your terminal (laptop/cloud), submit a code/command proposal mimicking the IDE Agent:
+     ```bash
+     curl -X POST http://localhost:8000/api/agent/proposals \
+       -H "Content-Type: application/json" \
+       -d '{"proposal_id": "P-101", "task": "OAuth Integration", "command": "pip install httpx", "changed_files": ["requirements.txt"], "description": "Need httpx to connect with OAuth APIs", "merge_request_iid": 1}'
+     ```
+   * Instantly, you will receive a push notification on your Telegram:
+     > 🤖 **New IDE Agent Proposal (ID: P-101)**
+     > 📋 **Task:** OAuth Integration
+     > 💻 **Command:** `pip install httpx`
+     > 📂 **Files:** `requirements.txt`
+     > 📥 *Reply with 'Approve P-101' or 'Reject P-101 [reason]' to decide.*
+3. **Approve from Mobile (Remote Command Execution):**
+   * Reply `Approve P-101` in the Telegram chat.
+   * PocketDev approves the proposal and automatically calls the GitLab API to merge Merge Request #1 (if configured).
+   * The IDE Agent polling the API (`GET /api/agent/proposals/P-101`) receives the `APPROVED` status and starts installing the package.
+4. **Real-time Log Sync:**
+   * Simulate the IDE Agent completing the task and sending terminal logs back to the CTO:
+     ```bash
+     curl -X POST http://localhost:8000/api/agent/logs \
+       -H "Content-Type: application/json" \
+       -d '{"proposal_id": "P-101", "log": "Successfully installed httpx-0.24.1. Tests passed."}'
+     ```
+   * You will receive the actual shell log on your Telegram chat:
+     > ℹ️ **IDE Agent Execution Log (ID: P-101):**
+     > `Successfully installed httpx-0.24.1. Tests passed.`
+5. **Team Delegation:**
+   * Send message: *"Assign task to dev_alex to implement Google OAuth buttons"* (replace `dev_alex` with a real GitLab username).
+   * PocketDev creates a GitLab Issue assigned to `dev_alex` and automatically broadcasts a notification in your Telegram Group Chat, tagging `@dev_alex` with the GitLab link.
+
+---
+
+## 5. Real-time IDE Agent REST APIs
+
+Your running IDE Agent can interact with the PocketDev backend using these REST endpoints:
+
+### Register a Proposal
+*   **Endpoint:** `POST /api/agent/proposals`
+*   **Request Body (JSON):**
+    ```json
+    {
+      "proposal_id": "P-101",
+      "task": "Task title/description",
+      "command": "optional command to run",
+      "changed_files": ["list", "of", "changed", "files"],
+      "description": "Why this change is needed",
+      "merge_request_iid": 123
+    }
+    ```
+*   **Response:** `{"status": "pending", "proposal_id": "P-101"}`
+
+### Poll Proposal Status
+*   **Endpoint:** `GET /api/agent/proposals/{proposal_id}`
+*   **Response:** `{"proposal_id": "P-101", "status": "APPROVED", "feedback": ""}` (Possible statuses: `PENDING`, `APPROVED`, `REJECTED`)
+
+### Submit Execution Logs
+*   **Endpoint:** `POST /api/agent/logs`
+*   **Request Body (JSON):**
+    ```json
+    {
+      "proposal_id": "P-101",
+      "log": "Terminal command output logs..."
+    }
+    ```
+
+---
+
+## 🔌 6. Model Context Protocol (MCP) Integration
+
+PocketDev acts as a **Model Context Protocol (MCP) Client**, enabling it to communicate with external MCP Servers. This architecture decouples direct API calls from the Agent's execution logic, aligning with modern agentic development standards.
+
+### How it works
+When the MCP mode is enabled, the GitLab tools inside [gitlab_tools.py](file:///home/thienvu/workspace/PocketDev/app/tools/gitlab_tools.py) automatically format requests as standard JSON-RPC payloads and route them through the GitLab MCP Server instead of invoking the local `python-gitlab` SDK directly.
+
+```
++------------------+                   +--------------------+                   +------------+
+|  Gemini Agent    | --(Tool Call)-->  |  PocketDev Client  | --(JSON-RPC)-->   | GitLab MCP |
+| (Orchestration)  |                   |    (MCP Client)    |  (SSE / HTTP)     |   Server   |
++------------------+                   +--------------------+                   +------------+
+```
+
+### Configuration
+To route GitLab tools through an external GitLab MCP Server:
+1. Open your local `.env` configuration file.
+2. Enable the MCP server flag and point to your running MCP Server instance:
+   ```env
+   USE_MCP_SERVER=True
+   MCP_SERVER_URL=http://localhost:8001
+   ```
+3. Restart the FastAPI backend server. All GitLab tool invocations will now tunnel dynamically through the MCP Server. If `USE_MCP_SERVER` is `False`, the system automatically falls back to local direct python-gitlab SDK execution.

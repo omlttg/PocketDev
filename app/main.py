@@ -1,5 +1,7 @@
 import inspect
 import logging
+from typing import List, Optional
+from pydantic import BaseModel
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
 from app.config import settings
@@ -18,6 +20,108 @@ app = FastAPI(
     description="Webhook Backend for PocketDev Core Agent connecting Telegram and GitLab / GCP Agent Builder",
     version="1.0.0"
 )
+
+# Pydantic schemas for IDE Agent communication
+class ProposalCreate(BaseModel):
+    proposal_id: str
+    task: str
+    command: Optional[str] = ""
+    changed_files: Optional[List[str]] = []
+    description: Optional[str] = ""
+    merge_request_iid: Optional[int] = None
+
+class ExecutionLog(BaseModel):
+    proposal_id: str
+    log: str
+
+@app.post("/api/agent/proposals")
+async def create_agent_proposal(proposal: ProposalCreate):
+    """
+    Endpoint for the IDE Agent to register a new code execution proposal.
+    Notifies the CTO immediately via Telegram.
+    """
+    from app.tools.team_tools import load_proposals, save_proposals
+    
+    proposals = load_proposals()
+    proposal_id = proposal.proposal_id
+    
+    # Save the proposal with status PENDING
+    proposals[proposal_id] = {
+        "id": proposal_id,
+        "task": proposal.task,
+        "command": proposal.command,
+        "changed_files": proposal.changed_files,
+        "description": proposal.description,
+        "status": "PENDING",
+        "merge_request_iid": proposal.merge_request_iid
+    }
+    save_proposals(proposals)
+    
+    # Notify CTO via Telegram push
+    chat_ids = []
+    if settings.ALLOWED_TELEGRAM_USER_IDS:
+        chat_ids = [int(uid.strip()) for uid in settings.ALLOWED_TELEGRAM_USER_IDS.split(",") if uid.strip()]
+        
+    notify_msg = (
+        f"🤖 <b>New IDE Agent Proposal (ID: {proposal_id})</b>\n\n"
+        f"📋 <b>Task:</b> {proposal.task}\n"
+        f"📝 <b>Description:</b> {proposal.description or 'No description provided.'}\n"
+    )
+    if proposal.command:
+        notify_msg += f"💻 <b>Command:</b> <code>{proposal.command}</code>\n"
+    if proposal.changed_files:
+        notify_msg += f"📂 <b>Files:</b> <code>{', '.join(proposal.changed_files)}</code>\n"
+        
+    notify_msg += f"\n📥 <i>Reply with 'Approve {proposal_id}' or 'Reject {proposal_id} [reason]' to decide.</i>"
+    
+    for cid in chat_ids:
+        try:
+            await send_telegram_message(cid, notify_msg)
+        except Exception as e:
+            logger.error(f"Failed to push proposal notification to {cid}: {e}")
+            
+    return {"status": "pending", "proposal_id": proposal_id}
+
+@app.get("/api/agent/proposals/{proposal_id}")
+async def get_agent_proposal(proposal_id: str):
+    """
+    Allows the IDE Agent to query the current status of its proposal.
+    """
+    from app.tools.team_tools import load_proposals
+    proposals = load_proposals()
+    proposal = proposals.get(proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return {
+        "proposal_id": proposal_id,
+        "status": proposal.get("status", "PENDING"),
+        "feedback": proposal.get("feedback", "")
+    }
+
+@app.post("/api/agent/logs")
+async def create_agent_log(exec_log: ExecutionLog):
+    """
+    Receives real-time terminal output logs from the IDE Agent and notifies the CTO.
+    """
+    chat_ids = []
+    if settings.ALLOWED_TELEGRAM_USER_IDS:
+        chat_ids = [int(uid.strip()) for uid in settings.ALLOWED_TELEGRAM_USER_IDS.split(",") if uid.strip()]
+        
+    log_msg = (
+        f"ℹ️ <b>IDE Agent Execution Log (ID: {exec_log.proposal_id}):</b>\n\n"
+        f"<code>{exec_log.log}</code>"
+    )
+    
+    for cid in chat_ids:
+        try:
+            truncated_msg = log_msg
+            if len(log_msg) > 4000:
+                truncated_msg = log_msg[:4000] + "\n... [Log truncated] </code>"
+            await send_telegram_message(cid, truncated_msg)
+        except Exception as e:
+            logger.error(f"Failed to push execution log to {cid}: {e}")
+            
+    return {"status": "logged"}
 
 # High-fidelity Glassmorphic Landing Page HTML
 LANDING_HTML = """
@@ -370,6 +474,35 @@ async def telegram_webhook(secret_token: str, request: Request):
         user_text = message.get("text", "")
         if not user_text:
             return {"status": "ignored", "reason": "Message is empty or contains no text"}
+            
+        # Intercept Approve/Reject commands from CTO
+        user_text_clean = user_text.strip()
+        user_text_lower = user_text_clean.lower()
+        
+        if user_text_lower.startswith("approve "):
+            proposal_id = user_text_clean[8:].strip()
+            from app.tools.team_tools import review_ide_agent_proposal
+            result = review_ide_agent_proposal(proposal_id=proposal_id, action="approve")
+            await send_telegram_message(chat_id, result)
+            return {"status": "success"}
+            
+        elif user_text_lower.startswith("reject "):
+            parts = user_text_clean[7:].strip().split(maxsplit=1)
+            proposal_id = parts[0].strip() if parts else ""
+            feedback = parts[1].strip() if len(parts) > 1 else ""
+            
+            if not feedback:
+                await send_telegram_message(
+                    chat_id,
+                    "⚠️ <b>Error:</b> Please provide feedback when rejecting a proposal.\n"
+                    "Example: <code>Reject P-99 Add more unit tests</code>"
+                )
+                return {"status": "success"}
+                
+            from app.tools.team_tools import review_ide_agent_proposal
+            result = review_ide_agent_proposal(proposal_id=proposal_id, action="reject", feedback=feedback)
+            await send_telegram_message(chat_id, result)
+            return {"status": "success"}
             
         # 3. Process conversation through Google Cloud Agent Builder OR local SDK fallback
         if settings.USE_AGENT_BUILDER:

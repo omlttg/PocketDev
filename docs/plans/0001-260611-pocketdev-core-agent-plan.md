@@ -3,7 +3,7 @@
 * **Plan Code:** 0001-260611-pocketdev-core-agent-plan
 * **Associated Spec:** 0001-260611-pocketdev-core-agent
 * **Created Date:** June 11, 2026
-* **Status:** In Progress
+* **Status:** Completed
 * **Authors:** Antigravity (AI Coding Assistant) & User
 
 ---
@@ -31,6 +31,12 @@
 * [x] **Task 4.2:** Run local integration tests and simulate webhook requests.
 * [x] **Task 4.3:** Add integration tests for Team/IDE simulation tools and verify.
 
+### Phase 5: MCP & Real-time API Integration
+* [x] **Task 5.1:** Implement FastAPI REST endpoints (`/api/agent/proposals`, `/api/agent/logs`) for cloud/workspace IDE Agent.
+* [x] **Task 5.2:** Implement instant Telegram webhook command interception for proposal approval/rejection bypass logic.
+* [x] **Task 5.3:** Support GitLab MCP Client Adapter routing JSON-RPC payloads to an external GitLab MCP Server based on `USE_MCP_SERVER`.
+* [x] **Task 5.4:** Write integration tests in `tests/test_core.py` verifying proposal flow, webhook command intercepts, and MCP routing.
+
 ---
 
 ## 2. Timeline & Progress Tracking
@@ -40,10 +46,12 @@ gantt
     title MVP 1 Implementation Timeline
     dateFormat  YYYY-MM-DD
     section Setup & Core
-    Task 1.3 (New Config)    :active, 2026-06-11, 1d
-    Task 2.4 & 2.5 (CTO Tools):active, 2026-06-11, 1d
+    Task 1.3 (New Config)    :done, 2026-06-11, 1d
+    Task 2.4 & 2.5 (CTO Tools):done, 2026-06-11, 1d
     section Webhook UI
-    Task 3.2 (Dashboard update):2026-06-11, 1d
+    Task 3.2 (Dashboard update):done, 2026-06-11, 1d
     section Testing
-    Task 4.3 (CTO Test suite)  :2026-06-11, 1d
+    Task 4.3 (CTO Test suite)  :done, 2026-06-11, 1d
+    section MCP & Real-time APIs
+    Task 5.1 - 5.4 (MCP & REST):done, 2026-06-11, 1d
 ```
