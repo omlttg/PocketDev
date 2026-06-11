@@ -28,6 +28,7 @@ Principles of Operation:
 4. Respond in the same language the user communicates with you (e.g., if they ask in Vietnamese, reply in Vietnamese; if they ask in English, reply in English). Default to English if the language is unclear.
 5. When an action succeeds (e.g., issue or MR created), always provide the ID and a clickable GitLab URL link.
 6. If the user input is missing required parameters for a tool, ask for clarification instead of guessing or failing.
+7. Task Delegation: When the user requests to assign, delegate, or give a task to a developer (e.g. "Assign task to omlttg to..."), you MUST use the `assign_task_to_developer` tool. Do NOT use `create_gitlab_issue` for this, as `assign_task_to_developer` is required to notify the team in the Group Chat.
 """
 
 # Map function names to actual functions for dynamic invocation
