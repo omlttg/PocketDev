@@ -76,6 +76,38 @@ If successful, you will receive a JSON confirmation:
 
 ---
 
+## 3. Google Cloud Agent Builder Integration (GCP Hackathon Core)
+
+To route your Agent's conversations through **Google Cloud Agent Builder (Vertex AI Agent Builder)** and fulfill the core hackathon requirements:
+
+### Step 1: Create an Agent in Google Cloud
+1. Go to the [Google Cloud Console Vertex AI Agent Builder](https://console.cloud.google.com/gen-app-builder).
+2. Create a new **Agent / Playbook** and configure Gemini (e.g. `gemini-1.5-flash`) as the generative model brain.
+3. Note your **GCP Project ID**, **Agent ID** (found in the Agent Settings), and **Location** (e.g. `global` or `us-central1`).
+
+### Step 2: Configure Webhook Tools (Fulfillment)
+In your Agent Builder console, create tools pointing back to your hosted FastAPI webhook server:
+*   **Webhook Tool Endpoint:** `https://your-public-url.run.app/webhook/tools`
+*   **Method:** `POST`
+*   **Tool Tags:** Create tool parameters matching our python function names (e.g., `get_ide_agent_status`, `review_ide_agent_proposal`, `assign_task_to_developer`).
+
+### Step 3: Update local `.env` variables
+Enable the Agent Builder client in your local configuration:
+```env
+USE_AGENT_BUILDER=True
+GCP_PROJECT_ID=your_google_cloud_project_id
+GCP_AGENT_ID=your_agent_builder_agent_id
+GCP_LOCATION=global  # or us-central1
+```
+
+### Step 4: Authenticate locally (ADC)
+To allow the local FastAPI server to query Google Cloud APIs, login via Google Application Default Credentials:
+```bash
+gcloud auth application-default login
+```
+
+---
+
 ## 4. Suggested 3-Minute Demo Video Script (Mobile CTO Workspace)
 
 Here is a walkthrough script demonstrating the core Agent-IDE coordination and team delegation capabilities:
