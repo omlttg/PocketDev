@@ -21,5 +21,4 @@ test_suite:
     - pip install --upgrade pip
     - pip install -r requirements.txt
   script:
-    - # Run python unit test suite
-      python -m unittest discover -s tests
+    - python -m unittest discover -s tests
