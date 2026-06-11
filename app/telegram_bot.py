@@ -18,6 +18,11 @@ def markdown_to_telegram_html(text: str) -> str:
     if not text:
         return ""
         
+    # Check if the text already contains HTML formatting tags to bypass markdown conversion and escaping
+    html_tags = ["<b>", "</b>", "<code>", "</code>", "<i>", "</i>", "<pre>", "</pre>", "<a ", "</a>"]
+    if any(tag in text for tag in html_tags):
+        return text
+        
     # 1. Escape HTML special characters first to avoid invalid nested tags
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
