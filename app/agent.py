@@ -191,7 +191,21 @@ class AgentManager:
             # Save the updated conversation history
             self._save_history_to_file(chat_id, chat)
             
-            return response.text
+            try:
+                return response.text
+            except Exception as text_err:
+                logger.warning(f"Failed to access response.text directly: {text_err}")
+                try:
+                    text_parts = []
+                    if hasattr(response, "parts") and response.parts:
+                        for part in response.parts:
+                            if hasattr(part, "text") and part.text:
+                                text_parts.append(part.text)
+                    if text_parts:
+                        return " ".join(text_parts)
+                except Exception as part_err:
+                    logger.error(f"Failed to parse text from parts: {part_err}")
+                return "I have executed the requested actions, but did not receive a text response from the model. Please check the status on GitLab."
 
         except Exception as e:
             logger.error(f"Error processing agent message: {e}", exc_info=True)
