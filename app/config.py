@@ -8,6 +8,13 @@ class Settings(BaseSettings):
     ALLOWED_TELEGRAM_USER_IDS: str = ""  # Comma-separated user IDs, e.g., "1234567,8901234"
     TELEGRAM_GROUP_CHAT_ID: str = ""     # Group chat ID for team notifications, e.g., "-100123456789"
     
+    # --- Google Cloud Agent Builder Configuration ---
+    # Set USE_AGENT_BUILDER=True to route conversations through Google Cloud Agent Builder
+    USE_AGENT_BUILDER: bool = False
+    GCP_PROJECT_ID: str = ""             # Google Cloud Project ID
+    GCP_LOCATION: str = "global"         # Agent Builder Location (e.g. 'global', 'us-central1')
+    GCP_AGENT_ID: str = ""               # Agent ID created in Agent Builder
+    
     GITLAB_URL: str = "https://gitlab.com"
     GITLAB_PERSONAL_ACCESS_TOKEN: str = ""
     GITLAB_PROJECT_ID: str = ""  # Numeric ID or path-with-namespace string

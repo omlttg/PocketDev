@@ -1,3 +1,4 @@
+import inspect
 import logging
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="PocketDev Backend",
-    description="Webhook Backend for PocketDev Core Agent connecting Telegram and GitLab",
+    description="Webhook Backend for PocketDev Core Agent connecting Telegram and GitLab / GCP Agent Builder",
     version="1.0.0"
 )
 
@@ -248,7 +249,7 @@ LANDING_HTML = """
             <div class="flow-arrow">➜</div>
             <div class="flow-step">⚡ FastAPI Server</div>
             <div class="flow-arrow">➜</div>
-            <div class="flow-step">🧠 Gemini Agent</div>
+            <div class="flow-step">🧠 Google Cloud Agent Builder</div>
             <div class="flow-arrow">➜</div>
             <div class="flow-step">🦊 GitLab / Cloud IDE</div>
         </div>
@@ -262,15 +263,15 @@ LANDING_HTML = """
             </thead>
             <tbody>
                 <tr>
-                    <td><b>Gemini API</b> (Reasoning Engine)</td>
-                    <td><span class="status-badge {gemini_class}">{gemini_status}</span></td>
+                    <td><b>GCP Agent Builder</b> (Reasoning Engine)</td>
+                    <td><span class="status-badge {gcp_class}">{gcp_status}</span></td>
                 </tr>
                 <tr>
                     <td><b>Telegram Bot API</b> (Command Webhook)</td>
                     <td><span class="status-badge {telegram_class}">{telegram_status}</span></td>
                 </tr>
                 <tr>
-                    <td><b>Telegram Group Chat</b> (Team Notification Channel)</td>
+                    <td><b>Telegram Group Chat</b> (Team Alerts)</td>
                     <td><span class="status-badge {group_class}">{group_status}</span></td>
                 </tr>
                 <tr>
@@ -299,8 +300,9 @@ LANDING_HTML = """
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     """Renders the dashboard landing page demonstrating system status."""
-    gemini_status = "Connected" if settings.GEMINI_API_KEY else "Missing API Key"
-    gemini_class = "success" if settings.GEMINI_API_KEY else "error"
+    gcp_ok = bool(settings.USE_AGENT_BUILDER and settings.GCP_PROJECT_ID and settings.GCP_AGENT_ID)
+    gcp_status = "Connected (Agent Builder)" if gcp_ok else ("Inactive (Local SDK)" if not settings.USE_AGENT_BUILDER else "Config Missing")
+    gcp_class = "success" if gcp_ok else ("success" if not settings.USE_AGENT_BUILDER else "error")
     
     telegram_status = "Configured" if settings.TELEGRAM_BOT_TOKEN else "Missing Token"
     telegram_class = "success" if settings.TELEGRAM_BOT_TOKEN else "error"
@@ -313,8 +315,8 @@ async def read_root():
     gitlab_class = "success" if gitlab_ok else "error"
     
     html_content = LANDING_HTML.format(
-        gemini_status=gemini_status,
-        gemini_class=gemini_class,
+        gcp_status=gcp_status,
+        gcp_class=gcp_class,
         telegram_status=telegram_status,
         telegram_class=telegram_class,
         group_status=group_status,
@@ -331,7 +333,6 @@ async def telegram_webhook(secret_token: str, request: Request):
     """
     Webhook Endpoint receiving messages forwarded by Telegram.
     """
-    # Verify the secret token to prevent spoofing
     if secret_token != settings.WEBHOOK_SECRET_TOKEN:
         logger.warning(f"Unauthorized Webhook access attempted with token: {secret_token}")
         raise HTTPException(
@@ -343,7 +344,6 @@ async def telegram_webhook(secret_token: str, request: Request):
         update = await request.json()
         logger.info(f"Received Telegram update: {update}")
         
-        # We only process typical text messages
         if "message" not in update:
             return {"status": "ignored", "reason": "Update is not of type Message"}
             
@@ -356,7 +356,6 @@ async def telegram_webhook(secret_token: str, request: Request):
         allowed_users = settings.allowed_users
         if allowed_users and user_id not in allowed_users:
             logger.warning(f"Blocked message from unauthorized user ID: {user_id} (@{from_user.get('username')})")
-            # Send permission error message back to the user chat
             await send_telegram_message(
                 chat_id=chat_id,
                 text=(
@@ -372,8 +371,14 @@ async def telegram_webhook(secret_token: str, request: Request):
         if not user_text:
             return {"status": "ignored", "reason": "Message is empty or contains no text"}
             
-        # 3. Process the message through the Agent (resolving GitLab / Team tools)
-        agent_response = await agent_manager.process_message(chat_id, user_text)
+        # 3. Process conversation through Google Cloud Agent Builder OR local SDK fallback
+        if settings.USE_AGENT_BUILDER:
+            logger.info("Routing conversation to Google Cloud Agent Builder API...")
+            from app.agent_builder import detect_intent_agent_builder
+            agent_response = await detect_intent_agent_builder(str(chat_id), user_text)
+        else:
+            logger.info("Routing conversation to local Gemini SDK fallback...")
+            agent_response = await agent_manager.process_message(chat_id, user_text)
         
         # 4. Respond to the user
         await send_telegram_message(chat_id, agent_response)
@@ -382,3 +387,76 @@ async def telegram_webhook(secret_token: str, request: Request):
     except Exception as e:
         logger.error(f"Error handling Telegram webhook request: {e}", exc_info=True)
         return {"status": "error", "detail": str(e)}
+
+@app.post("/webhook/tools")
+async def agent_builder_tools_webhook(request: Request):
+    """
+    Fulfillment webhook endpoint for Google Cloud Agent Builder.
+    Executes Python tools when triggered by the cloud agent.
+    """
+    try:
+        body = await request.json()
+        logger.info(f"Received Agent Builder Tool webhook: {body}")
+        
+        # Extract tag and parameters from Dialogflow CX Webhook Request structure
+        fulfillment_info = body.get("fulfillmentInfo", {})
+        tag = fulfillment_info.get("tag")
+        
+        session_info = body.get("sessionInfo", {})
+        parameters = session_info.get("parameters", {})
+        
+        if not tag:
+            raise HTTPException(status_code=400, detail="Missing fulfillmentInfo.tag")
+            
+        # Import maps of registered tools
+        from app.agent import TOOL_MAP
+        tool_func = TOOL_MAP.get(tag)
+        
+        if not tool_func:
+            result = f"Error: Tool '{tag}' is not registered on the fulfillment backend."
+            logger.warning(result)
+        else:
+            try:
+                # Align parameter names and types with the function signature
+                sig = inspect.signature(tool_func)
+                clean_args = {}
+                for param_name, param in sig.parameters.items():
+                    if param_name in parameters:
+                        val = parameters[param_name]
+                        # Handle basic type conversion
+                        if param.annotation == int:
+                            try:
+                                clean_args[param_name] = int(val)
+                            except (ValueError, TypeError):
+                                clean_args[param_name] = 0
+                        elif param.annotation == float:
+                            try:
+                                clean_args[param_name] = float(val)
+                            except (ValueError, TypeError):
+                                clean_args[param_name] = 0.0
+                        else:
+                            clean_args[param_name] = str(val)
+                            
+                logger.info(f"Executing tool '{tag}' with arguments: {clean_args}")
+                result = tool_func(**clean_args)
+            except Exception as tool_err:
+                logger.error(f"Error running tool {tag}: {tool_err}")
+                result = f"Error executing tool {tag}: {str(tool_err)}"
+                
+        # Return Dialogflow CX compliant Webhook Response
+        response_payload = {
+            "fulfillmentResponse": {
+                "messages": [
+                    {
+                        "text": {
+                            "text": [result]
+                        }
+                    }
+                ]
+            }
+        }
+        
+        return response_payload
+    except Exception as e:
+        logger.error(f"Error executing Agent Builder Tool webhook: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
