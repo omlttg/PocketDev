@@ -1,0 +1,25 @@
+image: python:3.11-slim
+
+# Cache pip packages and virtualenv across builds for faster pipelines
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+stages:
+  - test
+
+test_suite:
+  stage: test
+  before_script:
+    - python --version
+    - python -m venv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - # Run python unit test suite
+      python -m unittest discover -s tests
