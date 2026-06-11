@@ -44,7 +44,7 @@ class AgentManager:
     def _get_model(self) -> genai.GenerativeModel:
         """Initialize and configure the Gemini model."""
         return genai.GenerativeModel(
-            model_name="gemini-1.5-flash",  # High-speed model suitable for quick webhook responses
+            model_name="gemini-2.5-flash",  # High-speed model suitable for quick webhook responses
             tools=GITLAB_TOOLS,
             system_instruction=SYSTEM_INSTRUCTION
         )
@@ -122,16 +122,29 @@ class AgentManager:
             logger.info(f"[User {chat_id}]: {user_message}")
             response = chat.send_message(user_message)
             
+            def _extract_function_calls(resp):
+                calls = []
+                try:
+                    if hasattr(resp, "parts") and resp.parts:
+                        for part in resp.parts:
+                            if hasattr(part, "function_call") and part.function_call and part.function_call.name:
+                                calls.append(part.function_call)
+                except Exception as e:
+                    logger.warning(f"Error extracting function calls: {e}")
+                return calls
+
+            function_calls = _extract_function_calls(response)
+            
             # Loop for function/tool calling (max 5 iterations to prevent infinite loops)
             loop_count = 0
             max_loops = 5
             
-            while response.function_calls and loop_count < max_loops:
+            while function_calls and loop_count < max_loops:
                 loop_count += 1
-                logger.info(f"Gemini requested calling {len(response.function_calls)} tools (Iteration {loop_count})")
+                logger.info(f"Gemini requested calling {len(function_calls)} tools (Iteration {loop_count})")
                 
                 parts_responses = []
-                for function_call in response.function_calls:
+                for function_call in function_calls:
                     name = function_call.name
                     args = function_call.args
                     
@@ -146,6 +159,9 @@ class AgentManager:
                         except Exception as tool_err:
                             logger.error(f"Error executing tool {name}: {tool_err}")
                             result = f"Error executing tool: {str(tool_err)}"
+                        else:
+                            # If the tool is async or returns a coroutine, we should block or handle appropriately
+                            pass
                     else:
                         result = f"Error: Tool '{name}' not found on server."
                         
@@ -165,6 +181,7 @@ class AgentManager:
                     "role": "user",
                     "parts": parts_responses
                 })
+                function_calls = _extract_function_calls(response)
                 
             if loop_count >= max_loops:
                 logger.warning(f"Exceeded max tool calling loops ({max_loops}) for chat_id: {chat_id}")
