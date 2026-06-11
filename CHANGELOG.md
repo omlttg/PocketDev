@@ -15,10 +15,12 @@ This is the initial release of PocketDev for the **"Building Agents for Real-Wor
 *   **FastAPI Webhook Server:** Set up a production-ready async web server to handle inbound Telegram events.
 *   **High-fidelity Landing Page:** Integrated a Glassmorphic dark-themed HTML5 dashboard to view backend setup status.
 *   **Gemini Agent Core:** Wired up the `gemini-1.5-flash` model with customized English System Instructions.
-*   **GitLab Tools Suite (9 Tools):**
+*   **GitLab Tools Suite (12 Tools):**
     *   *Issues:* Create issues, list issues, and add comments.
     *   *Repository:* List branches, read file code contents, and open Merge Requests.
     *   *CI/CD Pipelines:* List pipeline statuses, retry failed pipelines, and accept/merge MRs.
+    *   *Team Delegation (New):* Automatically create GitLab issues and tag developers in the Telegram Group Chat to assign tasks.
+    *   *IDE Agent Supervision (New):* Fetch cloud-based IDE Agent logs, status, and review proposed code changes (Approving code proposals automatically triggers GitLab Merge actions and Pipeline runs).
 *   **Telegram Helper & Parser:** Created a robust async messaging handler featuring a custom Markdown-to-HTML parser compatible with Telegram formatting limits.
 *   **Local Session Memory:** Developed a lightweight JSON-backed local storage system to preserve user chat contexts across server restarts.
 *   **GitLab CI/CD Integration:** Configured `.gitlab-ci.yml` pipeline with automated unit testing for python code.

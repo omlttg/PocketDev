@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     TELEGRAM_BOT_TOKEN: str = ""
     ALLOWED_TELEGRAM_USER_IDS: str = ""  # Comma-separated user IDs, e.g., "1234567,8901234"
+    TELEGRAM_GROUP_CHAT_ID: str = ""     # Group chat ID for team notifications, e.g., "-100123456789"
     
     GITLAB_URL: str = "https://gitlab.com"
     GITLAB_PERSONAL_ACCESS_TOKEN: str = ""

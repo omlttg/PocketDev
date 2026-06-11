@@ -9,8 +9,13 @@ from .gitlab_tools import (
     list_pipeline_statuses,
     trigger_pipeline_retry
 )
+from .team_tools import (
+    assign_task_to_developer,
+    get_ide_agent_status,
+    review_ide_agent_proposal
+)
 
-# Danh sách tất cả các tools xuất ra để Gemini sử dụng làm Function Callings
+# Export all tools for the Gemini Agent
 GITLAB_TOOLS = [
     create_gitlab_issue,
     list_gitlab_issues,
@@ -20,5 +25,8 @@ GITLAB_TOOLS = [
     create_merge_request,
     accept_merge_request,
     list_pipeline_statuses,
-    trigger_pipeline_retry
+    trigger_pipeline_retry,
+    assign_task_to_developer,
+    get_ide_agent_status,
+    review_ide_agent_proposal
 ]

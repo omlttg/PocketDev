@@ -14,7 +14,7 @@ class TestPocketDevCore(unittest.TestCase):
         from app.agent import agent_manager
         from app.main import app
         
-        self.assertEqual(len(GITLAB_TOOLS), 9, "Should detect exactly 9 GitLab tools wrapper.")
+        self.assertEqual(len(GITLAB_TOOLS), 12, "Should detect exactly 12 tools (9 GitLab + 3 Team/IDE wrappers).")
         self.assertIsNotNone(app, "FastAPI app instance should not be None.")
 
     def test_markdown_parser(self):
@@ -29,6 +29,24 @@ class TestPocketDevCore(unittest.TestCase):
         
         parsed_html = markdown_to_telegram_html(test_markdown)
         self.assertEqual(parsed_html, expected_html, "Markdown parser translation mismatch.")
+
+    def test_team_tools_simulation(self):
+        """Verify the mock behavior of Cloud IDE Agent and Team task tools."""
+        from app.tools.team_tools import get_ide_agent_status, review_ide_agent_proposal
+        
+        # Test status retrieval
+        status = get_ide_agent_status()
+        self.assertIn("Cloud IDE Agent Status", status)
+        self.assertIn("P-01", status)
+        
+        # Test rejection proposal
+        reject_res = review_ide_agent_proposal("P-01", "reject", feedback="Add more unit tests")
+        self.assertIn("REJECTED", reject_res)
+        self.assertIn("Add more unit tests", reject_res)
+        
+        # Test invalid proposal
+        invalid_res = review_ide_agent_proposal("INVALID", "approve")
+        self.assertIn("not found", invalid_res)
 
 if __name__ == "__main__":
     unittest.main()

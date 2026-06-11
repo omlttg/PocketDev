@@ -241,7 +241,7 @@ LANDING_HTML = """
             </svg>
         </div>
         <h1>PocketDev Backend</h1>
-        <p class="tagline">Webhook server orchestrating GitLab actions using Gemini Agent via Telegram Bot</p>
+        <p class="tagline">Webhook server orchestrating GitLab actions & Cloud IDE Agents via Telegram Bot</p>
 
         <div class="flow-diagram">
             <div class="flow-step">📱 Telegram User</div>
@@ -250,7 +250,7 @@ LANDING_HTML = """
             <div class="flow-arrow">➜</div>
             <div class="flow-step">🧠 Gemini Agent</div>
             <div class="flow-arrow">➜</div>
-            <div class="flow-step">🦊 GitLab API</div>
+            <div class="flow-step">🦊 GitLab / Cloud IDE</div>
         </div>
 
         <table class="status-table">
@@ -268,6 +268,14 @@ LANDING_HTML = """
                 <tr>
                     <td><b>Telegram Bot API</b> (Command Webhook)</td>
                     <td><span class="status-badge {telegram_class}">{telegram_status}</span></td>
+                </tr>
+                <tr>
+                    <td><b>Telegram Group Chat</b> (Team Notification Channel)</td>
+                    <td><span class="status-badge {group_class}">{group_status}</span></td>
+                </tr>
+                <tr>
+                    <td><b>Cloud IDE Agent</b> (Google Antigravity Engine)</td>
+                    <td><span class="status-badge success">Connected</span></td>
                 </tr>
                 <tr>
                     <td><b>GitLab API Wrapper</b> (Execution Layer)</td>
@@ -297,6 +305,9 @@ async def read_root():
     telegram_status = "Configured" if settings.TELEGRAM_BOT_TOKEN else "Missing Token"
     telegram_class = "success" if settings.TELEGRAM_BOT_TOKEN else "error"
     
+    group_status = "Linked" if settings.TELEGRAM_GROUP_CHAT_ID else "Missing Group ID"
+    group_class = "success" if settings.TELEGRAM_GROUP_CHAT_ID else "error"
+    
     gitlab_ok = bool(settings.GITLAB_PERSONAL_ACCESS_TOKEN and settings.GITLAB_PROJECT_ID)
     gitlab_status = "Linked" if gitlab_ok else "Missing Token/ProjectID"
     gitlab_class = "success" if gitlab_ok else "error"
@@ -306,6 +317,8 @@ async def read_root():
         gemini_class=gemini_class,
         telegram_status=telegram_status,
         telegram_class=telegram_class,
+        group_status=group_status,
+        group_class=group_class,
         gitlab_status=gitlab_status,
         gitlab_class=gitlab_class,
         project_id=settings.GITLAB_PROJECT_ID or "Not configured",
@@ -359,7 +372,7 @@ async def telegram_webhook(secret_token: str, request: Request):
         if not user_text:
             return {"status": "ignored", "reason": "Message is empty or contains no text"}
             
-        # 3. Process the message through the Agent (resolving GitLab tools)
+        # 3. Process the message through the Agent (resolving GitLab / Team tools)
         agent_response = await agent_manager.process_message(chat_id, user_text)
         
         # 4. Respond to the user

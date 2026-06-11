@@ -76,20 +76,22 @@ If successful, you will receive a JSON confirmation:
 
 ---
 
-## 4. Suggested 3-Minute Demo Video Script
+## 4. Suggested 3-Minute Demo Video Script (Mobile CTO Workspace)
 
-Here is an effective walkthrough script for your hackathon submission video:
+Here is a walkthrough script demonstrating the core Agent-IDE coordination and team delegation capabilities:
 
-1. **Introduction (Greeting the Bot):**
+1. **Introduction (CTO Mobile Portal):**
    * Send message: *"Hello PocketDev"*
-   * The Agent responds introducing itself as your Pocket CTO/Lead Developer.
-2. **List Repository Branches:**
-   * Send message: *"What branches do we have in this repository?"*
-   * The Agent dynamically triggers the `list_gitlab_branches` tool and prints out a list of active branches.
-3. **Create a GitLab Issue:**
-   * Send message: *"Create a new issue to fix the dark mode footer and assign it to my username"* (replace with your actual GitLab username).
-   * The Agent automatically extracts parameters, calls `create_gitlab_issue`, and returns the created issue's URL link.
-   * Open the link in the browser to show the judge that the issue appeared in GitLab in real-time.
-4. **Monitor CI/CD Pipelines:**
-   * Send message: *"Show me the status of recent pipelines on the main branch."*
-   * The Agent calls `list_pipeline_statuses` and responds with the status of recent runs (success/failed) and their links.
+   * The Agent responds as your Pocket CTO Agent, ready to coordinate team tasks and Cloud IDE Agents.
+2. **IDE Agent Supervision (Cloud-based Antigravity IDE):**
+   * Send message: *"Check Cloud IDE Agent status"*
+   * The Agent calls `get_ide_agent_status` and displays the Cloud Agent logs, current active branch, and a pending code proposal `P-01` (Implement OAuth2 Google Login).
+3. **Approve Code Proposal (Triggering CI/CD):**
+   * Send message: *"Approve code proposal P-01"*
+   * PocketDev calls `review_ide_agent_proposal(proposal_id="P-01", action="approve")`.
+   * It logs the approval, calls GitLab API to accept the Merge Request, merges the code, and triggers the Pipeline run.
+4. **Team Task Delegation (Group Chat Alerts):**
+   * Send message: *"Assign task to dev_alex to implement Google OAuth frontend buttons"* (replace `dev_alex` with your team member's username).
+   * PocketDev calls `assign_task_to_developer` which:
+     * Creates a GitLab Issue assigned to `dev_alex`.
+     * Automatically posts a notification in the **Team Telegram Group Chat**, tagging `@dev_alex` with the task description and GitLab Issue link.
