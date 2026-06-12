@@ -128,4 +128,4 @@ Thumbs.db
 .env
 app/data/
 data/
-scratch/test_import.py
+scratch/
